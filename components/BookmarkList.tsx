@@ -22,45 +22,58 @@ export default function BookmarkList({
   const supabase = createClient()
 
   useEffect(() => {
-    const channel = supabase
-      .channel('bookmarks-channel')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'bookmarks',
-          filter: `user_id=eq.${userId}`
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setBookmarks((current) => [payload.new as Bookmark, ...current])
-          }
-          
-          if (payload.eventType === 'DELETE') {
-            setBookmarks((current) => 
-              current.filter((bookmark) => bookmark.id !== payload.old.id)
-            )
-          }
+  console.log('Setting up Realtime subscription for user:', userId)
+  
+  const channel = supabase
+    .channel('bookmarks-channel')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'bookmarks',
+        filter: `user_id=eq.${userId}`
+      },
+      (payload) => {
+        console.log('🔥 Realtime event received:', payload)
+        
+        if (payload.eventType === 'INSERT') {
+          console.log('Adding bookmark to state:', payload.new)
+          setBookmarks((current) => [payload.new as Bookmark, ...current])
         }
-      )
-      .subscribe()
+        
+        if (payload.eventType === 'DELETE') {
+          console.log('Removing bookmark from state:', payload.old.id)
+          setBookmarks((current) => 
+            current.filter((bookmark) => bookmark.id !== payload.old.id)
+          )
+        }
+      }
+    )
+    .subscribe((status) => {
+      console.log('Subscription status:', status)
+    })
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [supabase, userId])
+  return () => {
+    console.log('Cleaning up Realtime subscription')
+    supabase.removeChannel(channel)
+  }
+}, [supabase, userId])
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase
-      .from('bookmarks')
-      .delete()
-      .eq('id', id)
+  console.log('Deleting bookmark with id:', id)
+  
+  const { error } = await supabase
+        .from('bookmarks')
+        .delete()
+        .eq('id', id)
 
     if (error) {
-      console.error('Error deleting bookmark:', error)
+        console.error('Error deleting bookmark:', error)
+    } else {
+        console.log('Delete successful')
     }
-  }
+    }
 
   if (bookmarks.length === 0) {
     return (
