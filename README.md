@@ -234,6 +234,83 @@ This tells Postgres to include all column values (including `user_id`) in DELETE
 
 ---
 
+## Learning Journey: First Time with Supabase
+
+This project was my **first experience with Supabase**. Coming from a background of building custom backends with Express/Node.js, the Backend-as-a-Service (BaaS) approach was completely new territory.
+
+### Initial Challenges
+
+**Challenge 1: Understanding the Mental Model**
+- **Problem:** Used to thinking about REST APIs, routes, and controllers. Supabase's approach of "just query the database directly from the frontend" felt wrong at first.
+- **Learning:** Row Level Security (RLS) is the key. The security isn't in hiding endpoints — it's baked into the database itself. Even if someone bypassed my UI entirely, Postgres would reject unauthorized queries.
+- **Aha Moment:** When I realized that `supabase.from('bookmarks').select()` automatically filters by RLS policies, and there's no way to bypass it without valid authentication.
+
+**Challenge 2: Server vs. Client Supabase Instances**
+- **Problem:** Initially tried using the same Supabase client everywhere. Got confusing errors about cookies not being set.
+- **Learning:** Next.js App Router requires **two different Supabase clients**:
+  - `@supabase/ssr` with `createServerClient` for Server Components (reads from cookies)
+  - `@supabase/ssr` with `createBrowserClient` for Client Components (uses localStorage/cookies in browser)
+- **Solution:** Created separate `lib/supabase/server.ts` and `lib/supabase/client.ts` files. Now it's crystal clear which environment each component runs in.
+
+**Challenge 3: Realtime Wasn't "Just Working"**
+- **Problem:** Expected Realtime to work automatically after enabling it in the dashboard. Spent 30 minutes confused why INSERT events weren't showing up.
+- **Learning:** Realtime requires THREE things to work:
+  1. Enable the table in the Realtime publication (`alter publication supabase_realtime add table bookmarks`)
+  2. RLS policies must allow you to SELECT the rows (Realtime respects RLS)
+  3. For DELETE events specifically, you need `replica identity full` so Postgres includes the deleted row's data
+- **Debugging Process:** Added `console.log` to the Realtime callback, discovered events weren't firing at all, then discovered the replication wasn't enabled.
+
+**Challenge 4: Understanding the OAuth Flow**
+- **Problem:** Initial confusion about where Google redirects after login. Thought Google would talk directly to Supabase.
+- **Learning:** The flow is: **My App → Google → My App → Supabase**. Google never touches Supabase directly. My `/auth/callback` route is the middleman that exchanges the OAuth code for a session.
+- **Solution:** Had to configure redirect URIs in THREE places:
+  1. Google Cloud Console (where Google sends users after login)
+  2. Supabase dashboard (whitelisting allowed callback URLs)
+  3. My app code (`redirectTo` parameter in the OAuth call)
+
+### What I Learned About Supabase Specifically
+
+**Supabase is NOT just "Firebase with Postgres"**
+- It's a real PostgreSQL database with full SQL access
+- You can write raw SQL when needed (we did for table setup and policies)
+- RLS policies are actual Postgres policies, not a Supabase abstraction
+- This means it's production-grade and can scale to enterprise use cases
+
+**The Developer Experience is Excellent**
+- The JavaScript client (`supabase.from()`) is intuitive and type-safe
+- Realtime "just works" once configured properly
+- The dashboard is clear and well-organized
+- Error messages are helpful (much better than debugging raw SQL errors)
+
+**Row Level Security Changed How I Think About Security**
+- Previously: "Write middleware to check if `req.user.id === resource.userId`"
+- Now: "Write one RLS policy and the database enforces it everywhere"
+- This is more secure because there's no way to accidentally forget a check
+
+### Time Investment
+- **Reading Supabase docs:** ~1 hour
+- **Setting up first table with RLS:** ~30 minutes (lots of trial and error)
+- **Getting Realtime working:** ~45 minutes (debugging the replica identity issue)
+- **Understanding Auth flow:** ~20 minutes
+
+**Total learning time:** ~2.5 hours from zero Supabase knowledge to a working production app.
+
+### Would I Use Supabase Again?
+**Absolutely yes.** For this type of CRUD app with real-time features, Supabase eliminated days of backend work. No Express server, no WebSocket server setup, no authentication system to build from scratch — just focus on the product features.
+
+**When Supabase makes sense:**
+- CRUD applications with standard data models
+- Apps that need real-time features
+- MVP/prototype development (ship fast)
+- Small teams that don't want to maintain backend infrastructure
+
+**When you might not use Supabase:**
+- Complex business logic that belongs in backend services
+- Apps with heavy computational requirements
+- Situations requiring full control over database scaling/architecture
+
+---
+
 ## Key Learnings
 
 ### 1. Next.js App Router Paradigm Shift
